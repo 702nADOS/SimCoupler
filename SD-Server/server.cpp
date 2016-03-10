@@ -8,6 +8,20 @@
 #include <utils/traci/TraCIAPI.h>
 #include "json.hpp"
 
+// SUMO
+class TraCIClient : public TraCIAPI {
+	public:
+		TraCIClient();
+};
+
+TraCIClient::TraCIClient() {
+	try {
+		connect("localhost", 2001);
+	} catch(tcpip::SocketException &e) {
+		printf("tcpip: %s\n", e.what());
+	}
+}
+
 // for convenience
 using json = nlohmann::json;
 
@@ -19,7 +33,7 @@ void sigHandler(int);
 int serverSocket;
 
 int main(int argc , char *argv[]) {
-
+	TraCIClient traciclnt;
 	signal(SIGINT, sigHandler);
 
 	int serverSocket, c, clientSocket;
@@ -57,6 +71,7 @@ int main(int argc , char *argv[]) {
 		for (json::iterator it = data.begin(); it != data.end(); ++it) {
 			std::cout << it.key() << " : " << it.value() << "\n";
 		}
+    traciclnt.vehicle.moveTo("veh0", "route0", data["veh0"]["pos"]);
 		memset(buffer, 0, sizeof(buffer));
 	}
 

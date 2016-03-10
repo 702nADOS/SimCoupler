@@ -1,5 +1,6 @@
 CC=g++
 CFLAGS=-Wall -std=c++11
+LDLIBS=-lcommon -ltraci -ltcpip
 
-server: server.o
-	$(CC) -o server server.o $(CFLAGS)
+server: server.cpp
+	$(CC) -I$(SUMO_HOME)/src/ -o server server.cpp $(CFLAGS) -L$(SUMO_HOME)/src/utils/traci -L $(SUMO_HOME)/src/foreign/tcpip -L$(SUMO_HOME)/src/utils/common $(LDLIBS)
