@@ -10,8 +10,8 @@
 
 // SUMO
 class TraCIClient : public TraCIAPI {
-	public:
-		TraCIClient();
+public:
+  TraCIClient();
 };
 
 TraCIClient::TraCIClient() {
@@ -34,6 +34,23 @@ int serverSocket;
 
 int main(int argc , char *argv[]) {
 	TraCIClient traciclnt;
+	typedef std::tuple<std::string, double> lane;
+
+	std::vector<std::string> list = traciclnt.route.getEdges("route0");
+	std::vector<lane> llist(list.size());
+	for(std::vector<std::string>::iterator it = list.begin(); it != list.end(); ++it) {
+	  printf("Edge: %s\n", (*it).c_str());
+	  llist.push_back(std::make_tuple(*it + "_0", traciclnt.lane.getLength((*it + "_0"))));
+	}
+
+	double length = 0;
+	for(std::vector<lane>::iterator it = llist.begin(); it != llist.end(); ++it) {
+	  printf("Edge: %s with %f meter.\n", std::get<0>(*it).c_str(), std::get<1>(*it));
+	  length += std::get<1>(*it);
+	};
+	//printf("Amount of edges: %d\n", list.size());
+	printf("Total length: %f\nBy %d lanes\n", length, llist.size());
+
 	signal(SIGINT, sigHandler);
 
 	int serverSocket, c, clientSocket;
@@ -71,7 +88,23 @@ int main(int argc , char *argv[]) {
 		for (json::iterator it = data.begin(); it != data.end(); ++it) {
 			std::cout << it.key() << " : " << it.value() << "\n";
 		}
-    traciclnt.vehicle.moveTo("veh0", "route0", data["veh0"]["pos"]);
+
+		double tmplength = 0;
+		for (std::vector<lane>::iterator it = llist.begin(); it != llist.end(); ++it) {
+		  tmplength += std::get<1>(*it);
+		  if (tmplength >= data["veh0"]["pos"]) {
+		    printf("Lane: %s", std::get<0>(*it).c_str());
+		    printf(", pos: %f\n", tmplength - (double)data["veh0"]["pos"]);
+		    try {
+		      traciclnt.vehicle.moveTo("veh0", (std::get<0>(*it)).c_str(), tmplength - (double)data["veh0"]["pos"]);
+		    } catch(tcpip::SocketException &e) {
+		      printf("tcpip: %s\n", e.what());
+		    }
+		    break;
+		  }
+		}
+
+		  //traciclnt.vehicle.moveTo("veh0", "route0", data["veh0"]["pos"]);
 		memset(buffer, 0, sizeof(buffer));
 	}
 
