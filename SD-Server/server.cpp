@@ -82,63 +82,12 @@ std::vector<std::string> newRoute(std::vector<std::string> edgeList, std::string
 
 int main(int argc , char *argv[]) {
   TraCIClient traciclnt;
-
-  /* querying routes. */
-  std::vector<std::string> routeList = traciclnt.route.getIDList();
-  /* querying edges, assuming routeList only contains one route
-   * with all edges as a circuit.
-   * TODO proper handling
-   */
-  std::vector<std::string> edgeList = traciclnt.route.getEdges(routeList[0]);
-  /* querying lanes. */
-  std::vector<std::string> laneList = traciclnt.lane.getIDList();
-
-
-  /* determine length by iterating over the lanes */
-  double _length = 0;
-  for(std::vector<std::string>::iterator it = laneList.begin(); it != laneList.end(); ++it) {
-    /* "remove" filler lanes */
-    if ((*it)[0] == ':')
-      continue;
-
-    std::cout << "Current lane: " << *it << std::endl;
-
-    std::string edgeID = traciclnt.lane.getEdgeID(*it);
-    double laneLength = traciclnt.lane.getLength(*it);
-    std::cout << *it << " from edge " << edgeID << " with " << laneLength << "m length." << std::endl;
-    _length += laneLength;
-  };
-
-  std::cout << "Complete length: " << _length << std::endl;
-
-  typedef std::tuple<std::string, double> lane;
-
-  /*
-   * legacy stuff here
-   */
-  try {
-    edgeList = traciclnt.route.getEdges("route0");
-  } catch(tcpip::SocketException &e) {
-    printf("[Error] tcpip: %s\n", e.what());
-  }
-
-  std::vector<lane> llist(0);
-  for(std::vector<std::string>::iterator it = edgeList.begin(); it != edgeList.end(); ++it) {
-    printf("Edge: %s\n", (*it).c_str());
-    llist.push_back(std::make_tuple(*it + "_0", traciclnt.lane.getLength((*it + "_0"))));
-  }
-
-  double length = 0;
-  for(std::vector<lane>::iterator it = llist.begin(); it != llist.end(); ++it) {
-    printf("Edge: %s with %f meter.\n", std::get<0>(*it).c_str(), std::get<1>(*it));
-    length += std::get<1>(*it);
-  };
-  std::cout << "Total length: " << length << "\nBy " << llist.size() << " lanes\n";
-
+  /* starting simulation */
   traciclnt.simulationStep(0);
 
   signal(SIGINT, sigHandler);
 
+  /* prepare network stuff */
   int serverSocket, c, clientSocket;
   char buffer[BUFFER_SIZE];
   struct sockaddr_in serverAddr, clientAddr;
@@ -147,7 +96,7 @@ int main(int argc , char *argv[]) {
 
   serverAddr.sin_family = AF_INET;
   serverAddr.sin_port = htons(PORT);
-  serverAddr.sin_addr.s_addr = inet_addr("0.0.0.0");
+  serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
   memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
   if(bind(serverSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr)) == 0) {
@@ -167,59 +116,76 @@ int main(int argc , char *argv[]) {
   clientSocket = accept(serverSocket, (struct sockaddr *) &clientAddr, (socklen_t *) &c);
   puts("Connection accepted");
 
-  json oldData = NULL;
-  double sd2_length = 0;
+  /* get starting lane for vehicle */
+  std::string laneID = traciclnt.vehicle.getLaneID("veh0");
+  std::cout << "[SUMO] veh0 starts on lane: " << laneID << std::endl;
 
-  int count = 1;
-  std::string _route = "route" + std::to_string(count);
+  /* get successor lanes of current lane
+   * and insert them into a laneList
+   *
+   * TODO
+   * we assume there is only one lane per edge
+   * and therefore only one successor
+   */
+  typedef std::tuple<std::string, double> lane;
+  std::vector<lane> _laneList;
+  _laneList.push_back(lane(laneID, traciclnt.lane.getLength(laneID)));
+
+  std::vector<std::string> links = traciclnt.lane.getLinks(laneID);
+  while(links[0] != laneID) {
+    _laneList.push_back(lane(links[0], traciclnt.lane.getLength(links[0])));
+    links = traciclnt.lane.getLinks(links[0]);
+  }
+
+  /* print _laneList and determine length*/
+  double length = 0.0;
   
+  std::cout << "Elements of _laneList:" << std::endl;
+  for(std::vector<lane>::iterator it = _laneList.begin(); it != _laneList.end(); ++it) {
+    length += std::get<1>(*it);
+    std::cout << std::get<0>(*it) << " with length " << std::get<1>(*it) << " m" << std::endl;
+  }
+  std::cout << "Total length: " << length << std::endl;
+
+  /* oldData buffer for the last simulation step */
+  json oldData = NULL;
+
   while( recv(clientSocket, buffer, BUFFER_SIZE, 0) ) {
     json data = json::parse(buffer);
-    sd2_length = (double)data["veh0"]["trackLength"];
+    /* there is no oldData for the first simulation step */
     if (oldData == NULL) oldData = data;
 
+    std::cout << "[SD2] Current (absolute) position on track: " << (double)data["veh0"]["pos"] << std::endl;
+    std::cout << "[SD2] Car angle: " << (double)data["veh0"]["angle"] << std::endl;
+
+    if((double)data["veh0"]["pos"] < 0) {
+      continue;
+    }
+
+    /* find equivalent lane for absolute SD2 position in lanelist of SUMO */
     double tmplength = 0;
-    printf("Current position: %f\n", (double)data["veh0"]["pos"]);
-    for (std::vector<lane>::iterator it = llist.begin(); it != llist.end(); ++it) {
+    for(std::vector<lane>::iterator it = _laneList.begin(); it != _laneList.end(); ++it) {
       tmplength += std::get<1>(*it);
-      printf("Position: %f\n", fmod((double)data["veh0"]["pos"], length));
-      if (tmplength > fmod((double)data["veh0"]["pos"], length) && data["veh0"]["pos"] >= 0) {
-	//printf("Lane: %s, Pos: %f\n", std::get<0>(*it).c_str(), (double)data["veh0"]["pos"] - (tmplength - std::get<1>(*it)));
+      if(tmplength > fmod((double)data["veh0"]["pos"], length)) {
 	try {
-	  std::string currentEdge = traciclnt.vehicle.getRoadID(traciclnt.vehicle.getIDList()[0]);
-	  std::cout << "Current edge: " << currentEdge << std::endl;
-
-	  std::cout << "route: " << _route << std::endl;
-	  
-	  if ((double)data["veh0"]["pos"] < (double)oldData["veh0"]["pos"]) {
-	    //traciclnt.vehicle.changeRoute(traciclnt.vehicle.getIDList()[0], newRoute(edgeList, currentEdge, true));
-	    traciclnt.route.add(_route, newRoute(edgeList, currentEdge, true));
-	  } else {
-	    //traciclnt.vehicle.changeRoute(traciclnt.vehicle.getIDList()[0], newRoute(edgeList, currentEdge, false));
-	    traciclnt.route.add(_route, newRoute(edgeList, currentEdge, false));
-	  }
-	  //traciclnt.vehicle.changeRouteID("veh0", _route.c_str());
-	  //traciclnt.vehicle.reroute("veh0");
-	  //traciclnt.vehicle.changeRouteID("veh0", "route0");
-	  //std::cout << "ls vehicle: " << traciclnt.vehicle.getIDList()[0] << std::endl;
-	  traciclnt.vehicle.remove(traciclnt.vehicle.getIDList()[0], 0);
-	  traciclnt.vehicle.add("veh0", "Car", _route, -2, -2, 0, 0);
-	  traciclnt.vehicle.moveTo("veh0", std::get<0>(*it), (double)data["veh0"]["pos"] - (tmplength - std::get<1>(*it)));
-	  traciclnt.simulationStep(0);
-	  count++;
-	  _route = "route" + std::to_string(count);
-	  std::cout << "route: " << _route << std::endl;
-
-	} catch(tcpip::SocketException &e) {
-	  printf("tcpip: %s\n", e.what());
+	  traciclnt.vehicle.remove("veh0", 0);
+	  traciclnt.vehicle.add("veh0", "Car", "route0", -2, -2, 0, 0);
+	  traciclnt.vehicle.moveTo("veh0", std::get<0>(*it), fmod((double)data["veh0"]["pos"], length) - (tmplength - std::get<1>(*it)));
+	  break;
 	}
-	break;
+	catch(tcpip::SocketException &e) {
+	  std::cout << "[tcpip] " << e.what() << std::endl;
+	}
       }
     }
 
+    /* replace old data */
     oldData = data;
 
-    //traciclnt.vehicle.moveTo("veh0", "route0", data["veh0"]["pos"]);
+    /* jump to next simulation step */
+    traciclnt.simulationStep(0);
+
+    /* clear buffer */
     memset(buffer, 0, sizeof(buffer));
   }
 
