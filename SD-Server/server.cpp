@@ -56,7 +56,7 @@ std::vector<std::string> newRoute(std::vector<std::string> edgeList, std::string
       route.push_back(*it);
       std::cout << "Pushed " << *it << " to route." << std::endl;
       if(it == edgeList.begin()) {
-	it = edgeList.end();
+        it = edgeList.end();
       }
     }
   } else { //forwards
@@ -64,9 +64,9 @@ std::vector<std::string> newRoute(std::vector<std::string> edgeList, std::string
       route.push_back(*it);
       std::cout << "Pushed " << *it << " to route." << std::endl;
       if(it == edgeList.end()-1 && route.size() < MAX_ROUTE_ELEMENTS) {
-	it = edgeList.begin();
-	route.push_back(*it);
-	std::cout << "Pushed " << *it << " to route." << std::endl;
+        it = edgeList.begin();
+        route.push_back(*it);
+        std::cout << "Pushed " << *it << " to route." << std::endl;
       }
     }
   }
@@ -139,7 +139,7 @@ int main(int argc , char *argv[]) {
 
   /* print _laneList and determine length*/
   double length = 0.0;
-  
+
   std::cout << "Elements of _laneList:" << std::endl;
   for(std::vector<lane>::iterator it = _laneList.begin(); it != _laneList.end(); ++it) {
     length += std::get<1>(*it);
@@ -167,15 +167,60 @@ int main(int argc , char *argv[]) {
     for(std::vector<lane>::iterator it = _laneList.begin(); it != _laneList.end(); ++it) {
       tmplength += std::get<1>(*it);
       if(tmplength > fmod((double)data["veh0"]["pos"], length)) {
-	try {
-	  traciclnt.vehicle.remove("veh0", 0);
-	  traciclnt.vehicle.add("veh0", "Car", "route0", -2, -2, 0, 0);
-	  traciclnt.vehicle.moveTo("veh0", std::get<0>(*it), fmod((double)data["veh0"]["pos"], length) - (tmplength - std::get<1>(*it)));
-	  break;
-	}
-	catch(tcpip::SocketException &e) {
-	  std::cout << "[tcpip] " << e.what() << std::endl;
-	}
+        try {
+#define VEH_NAME "veh0"
+          /* remove vehicle, reason teleportation
+           * 0 = NOTIFICATION_TELEPORT
+           *
+           * http://sumo.dlr.de/wiki/TraCI/Change_Vehicle_State#remove_.280x81.29
+           */
+          traciclnt.vehicle.remove(VEH_NAME, 0);
+
+          /* add vehicle */
+          traciclnt.vehicle.add(VEH_NAME, "route0", "Car", std::to_string(traciclnt.simulation.getCurrentTime()));
+
+          /* gather information for moveToXY
+           *
+           * edgeID: ID of the edge, the vehicle will be placed on
+           * pos: position of the vehicle along the current lane
+           * laneID: ID of the lane (currently always 0)
+           * angle: Angle as given by SD2
+           */
+          std::string edgeID = traciclnt.lane.getEdgeID(std::get<0>(*it));
+          double pos = fmod((double)data[VEH_NAME]["pos"], length) - (tmplength - std::get<1>(*it));
+          int laneID = 0;
+          double angle = (double)data[VEH_NAME]["angle"];
+
+          /* angle conversion from SD2 ---> SUMO
+           *
+           *         90°                           0°
+           *
+           * 180°           0°/360° ---> -90°            90°
+           *
+           *        270°                       180°/-180°
+           */
+          double sangle;
+          if (angle > 270)
+            sangle = 450 - angle;
+          else
+            sangle = 90 - angle;
+
+          /* conversion of "along the lane" position to 2D-Position
+           *
+           * TraCIPosition = struct{ double x, double y };
+           */
+          TraCIAPI::TraCIPosition tdpos = traciclnt.simulation.convert2D(edgeID, pos, laneID);
+
+          /* move the vehicle to the equivalent position and set angle */
+          traciclnt.vehicle.moveToXY(VEH_NAME, edgeID, laneID, tdpos.x, tdpos.y, sangle, true);
+
+          std::cout << "[SUMO] Moved vehicle " << VEH_NAME << " to (" << tdpos.x << "," << tdpos.y << ") with an angle of " << sangle << "°" << std::endl;
+
+          break;
+        }
+        catch(tcpip::SocketException &e) {
+          std::cout << "[tcpip] " << e.what() << std::endl;
+        }
       }
     }
 
