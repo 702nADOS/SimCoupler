@@ -32,6 +32,8 @@ using json = nlohmann::json;
 #define BUFFER_SIZE 1024
 #define MAX_ROUTE_ELEMENTS 10
 
+#define VEH_NAME "veh0"
+
 void sigHandler(int);
 
 int serverSocket;
@@ -117,8 +119,10 @@ int main(int argc , char *argv[]) {
   puts("Connection accepted");
 
   /* get starting lane for vehicle */
-  std::string laneID = traciclnt.vehicle.getLaneID("veh0");
-  std::cout << "[SUMO] veh0 starts on lane: " << laneID << std::endl;
+  std::string laneID = traciclnt.vehicle.getLaneID(VEH_NAME);
+  TraCIAPI::TraCIPosition blubb = traciclnt.vehicle.getPosition(VEH_NAME);
+  std::cout << "[SUMO] VEH_NAME position: " << blubb.x << "," << blubb.y << std::endl;
+  std::cout << "[SUMO] VEH_NAME starts on lane: " << laneID << std::endl;
 
   /* get successor lanes of current lane
    * and insert them into a laneList
@@ -150,15 +154,23 @@ int main(int argc , char *argv[]) {
   /* oldData buffer for the last simulation step */
   json oldData = NULL;
 
+  double zx, zy, zz;
+
   while( recv(clientSocket, buffer, BUFFER_SIZE, 0) ) {
     json data = json::parse(buffer);
     /* there is no oldData for the first simulation step */
-    if (oldData == NULL) oldData = data;
+    if (oldData == NULL) {
+      oldData = data;
+      // setting initial zero points
+      zx = data[VEH_NAME]["x"];
+      zy = data[VEH_NAME]["y"];
+      zz = data[VEH_NAME]["z"];
+    }
 
-    std::cout << "[SD2] Current (absolute) position on track: " << (double)data["veh0"]["pos"] << std::endl;
-    std::cout << "[SD2] Car angle: " << (double)data["veh0"]["angle"] << std::endl;
+    std::cout << "[SD2] Current (absolute) position on track: " << (double)data[VEH_NAME]["pos"] << std::endl;
+    std::cout << "[SD2] Car angle: " << (double)data[VEH_NAME]["angle"] << std::endl;
 
-    if((double)data["veh0"]["pos"] < 0) {
+    if((double)data[VEH_NAME]["pos"] < 0) {
       continue;
     }
 
@@ -166,9 +178,8 @@ int main(int argc , char *argv[]) {
     double tmplength = 0;
     for(std::vector<lane>::iterator it = _laneList.begin(); it != _laneList.end(); ++it) {
       tmplength += std::get<1>(*it);
-      if(tmplength > fmod((double)data["veh0"]["pos"], length)) {
+      if(tmplength > fmod((double)data[VEH_NAME]["pos"], length)) {
         try {
-#define VEH_NAME "veh0"
           /* remove vehicle, reason teleportation
            * 0 = NOTIFICATION_TELEPORT
            *
@@ -212,9 +223,12 @@ int main(int argc , char *argv[]) {
           TraCIAPI::TraCIPosition tdpos = traciclnt.simulation.convert2D(edgeID, pos, laneID);
 
           /* move the vehicle to the equivalent position and set angle */
-          traciclnt.vehicle.moveToXY(VEH_NAME, edgeID, laneID, tdpos.x, tdpos.y, sangle, true);
+          //traciclnt.vehicle.moveToXY(VEH_NAME, edgeID, laneID, tdpos.x, tdpos.y, sangle, true);
+	  traciclnt.vehicle.moveToXY(VEH_NAME, edgeID, laneID, (double)data[VEH_NAME]["x"] - zx, (double)data[VEH_NAME]["y"] - zy, sangle, true);
 
           std::cout << "[SUMO] Moved vehicle " << VEH_NAME << " to (" << tdpos.x << "," << tdpos.y << ") with an angle of " << sangle << "°" << std::endl;
+
+	  std::cout << "[SD2] (" << (double)data[VEH_NAME]["x"] << "," << (double)data[VEH_NAME]["y"] << "," << (double)data[VEH_NAME]["z"] << ")" << std::endl;
 
           break;
         }
