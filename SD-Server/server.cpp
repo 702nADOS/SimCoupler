@@ -7,8 +7,9 @@
 #include <signal.h>
 #include <utils/traci/TraCIAPI.h>
 #include "json.hpp"
+#include <cmath>
 
-#define SUMO_PORT 2001
+#define SUMO_PORT 2002
 #define SUMO_IP "localhost"
 
 // SUMO
@@ -30,57 +31,13 @@ using json = nlohmann::json;
 
 #define PORT 2000
 #define BUFFER_SIZE 1024
-#define MAX_ROUTE_ELEMENTS 10
 
+// TODO currently only one vehicle is considered
 #define VEH_NAME "veh0"
 
 void sigHandler(int);
 
 int serverSocket;
-
-/**
- * Builds a new route for SUMO
- * The number of elements in the route is defined by MAX_ROUTE_ELEMENTS
- *
- * @param name of the current edge the vehicle is standing on
- * @param false if the vehicle is driving forwards
- **/
-std::vector<std::string> newRoute(std::vector<std::string> edgeList, std::string edge, bool backwards) {
-  // create new route list
-  std::vector<std::string> route;
-
-  // find index of current edge
-  std::vector<std::string>::iterator index = std::find(edgeList.begin(), edgeList.end(), edge);
-
-  // add elements to route
-  if(backwards) { //backwards
-    for(std::vector<std::string>::iterator it = index; route.size() < MAX_ROUTE_ELEMENTS; --it) {
-      route.push_back(*it);
-      std::cout << "Pushed " << *it << " to route." << std::endl;
-      if(it == edgeList.begin()) {
-        it = edgeList.end();
-      }
-    }
-  } else { //forwards
-    for(std::vector<std::string>::iterator it = index; route.size() < MAX_ROUTE_ELEMENTS; ++it) {
-      route.push_back(*it);
-      std::cout << "Pushed " << *it << " to route." << std::endl;
-      if(it == edgeList.end()-1 && route.size() < MAX_ROUTE_ELEMENTS) {
-        it = edgeList.begin();
-        route.push_back(*it);
-        std::cout << "Pushed " << *it << " to route." << std::endl;
-      }
-    }
-  }
-
-  // return new route
-  std::cout << "X -> ";
-  for(std::vector<std::string>::iterator it = route.begin(); it != route.end(); ++it) {
-    std::cout << *it << " -> ";
-  }
-  std::cout << "X" << std::endl;
-  return route;
-}
 
 int main(int argc , char *argv[]) {
   TraCIClient traciclnt;
@@ -154,17 +111,11 @@ int main(int argc , char *argv[]) {
   /* oldData buffer for the last simulation step */
   json oldData = NULL;
 
-  double zx, zy, zz;
-
   while( recv(clientSocket, buffer, BUFFER_SIZE, 0) ) {
     json data = json::parse(buffer);
     /* there is no oldData for the first simulation step */
     if (oldData == NULL) {
       oldData = data;
-      // setting initial zero points
-      zx = data[VEH_NAME]["x"];
-      zy = data[VEH_NAME]["y"];
-      zz = data[VEH_NAME]["z"];
     }
 
     std::cout << "[SD2] Current (absolute) position on track: " << (double)data[VEH_NAME]["pos"] << std::endl;
@@ -220,16 +171,31 @@ int main(int argc , char *argv[]) {
            *
            * TraCIPosition = struct{ double x, double y };
            */
+	  std::cout << "Translating edgeID (" << edgeID << "), pos (" << pos << ") and laneID (" << laneID << ") into tdpos" << std::endl;
           TraCIAPI::TraCIPosition tdpos = traciclnt.simulation.convert2D(edgeID, pos, laneID);
+	  std::cout << "tdpos is (" << tdpos.x << "," << tdpos.y << ")" << std::endl;
+	  /* getting (x,y) of first track segment in sumo
+	   *
+	   * SUMO:     	SD2:
+	   * --------  	+-------
+	   * +
+	   * --------	--------
+	   */
+	  TraCIAPI::TraCIPosition start = traciclnt.simulation.convert2D("0to1", 0, 0);
+	  double width = traciclnt.lane.getWidth(std::get<0>(*it));
+	  struct {
+	    double x, y;
+	  } newPos = {
+	    (double)data[VEH_NAME]["x"] - ((double)data[VEH_NAME]["fsX"] - start.x),
+	    (double)data[VEH_NAME]["y"] - ((double)data[VEH_NAME]["fsY"] - start.y) + width / 2
+	  };
 
           /* move the vehicle to the equivalent position and set angle */
-          //traciclnt.vehicle.moveToXY(VEH_NAME, edgeID, laneID, tdpos.x, tdpos.y, sangle, true);
-	  traciclnt.vehicle.moveToXY(VEH_NAME, edgeID, laneID, (double)data[VEH_NAME]["x"] - zx, (double)data[VEH_NAME]["y"] - zy, sangle, true);
+	  traciclnt.vehicle.moveToXY(VEH_NAME, edgeID, laneID, newPos.x, newPos.y, sangle, true);
 
-          std::cout << "[SUMO] Moved vehicle " << VEH_NAME << " to (" << tdpos.x << "," << tdpos.y << ") with an angle of " << sangle << "°" << std::endl;
+          std::cout << "[SUMO] Moved vehicle " << VEH_NAME << " to (" << newPos.x << "," << newPos.y << ") with an angle of " << sangle << "°" << std::endl;
 
 	  std::cout << "[SD2] (" << (double)data[VEH_NAME]["x"] << "," << (double)data[VEH_NAME]["y"] << "," << (double)data[VEH_NAME]["z"] << ")" << std::endl;
-
           break;
         }
         catch(tcpip::SocketException &e) {
