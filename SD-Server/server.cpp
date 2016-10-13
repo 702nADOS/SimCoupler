@@ -5,8 +5,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include "ssd2.pb.h"
 #include <utils/traci/TraCIAPI.h>
-#include "json.hpp"
 #include <cmath>
 
 #define SUMO_PORT 2002
@@ -25,9 +25,6 @@ TraCIClient::TraCIClient() {
     printf("tcpip: %s\n", e.what());
   }
 }
-
-// for convenience
-using json = nlohmann::json;
 
 #define PORT 2000
 #define BUFFER_SIZE 1024
@@ -48,7 +45,7 @@ int main(int argc , char *argv[]) {
 
   /* prepare network stuff */
   int serverSocket, c, clientSocket;
-  char buffer[BUFFER_SIZE];
+  void* buffer = malloc(BUFFER_SIZE);
   struct sockaddr_in serverAddr, clientAddr;
 
   serverSocket = socket(PF_INET, SOCK_STREAM, 0);
@@ -108,20 +105,24 @@ int main(int argc , char *argv[]) {
   }
   std::cout << "Total length: " << length << std::endl;
 
-  /* oldData buffer for the last simulation step */
-  json oldData = NULL;
+  while(1) {
+    int size = 0;
+    recv(clientSocket, &size, sizeof(int), 0);
 
-  while( recv(clientSocket, buffer, BUFFER_SIZE, 0) ) {
-    json data = json::parse(buffer);
-    /* there is no oldData for the first simulation step */
-    if (oldData == NULL) {
-      oldData = data;
-    }
+    std::cout << "Packet size: " << size << std::endl;
 
-    std::cout << "[SD2] Current (absolute) position on track: " << (double)data[VEH_NAME]["pos"] << std::endl;
-    std::cout << "[SD2] Car angle: " << (double)data[VEH_NAME]["angle"] << std::endl;
+    if(size <= 0) continue;
 
-    if((double)data[VEH_NAME]["pos"] < 0) {
+    if (recv(clientSocket, buffer, size, MSG_WAITALL) != size) continue;
+    //while( recv(clientSocket, buffer, BUFFER_SIZE, 0) != -1 ) {
+    vehicle veh;
+    //if (veh.ParseFromArray(buffer, size) == false) continue;
+    veh.ParseFromArray(buffer, size);
+
+    std::cout << "[SD2] Current (absolute) position on track: " << veh.dist() << std::endl;
+    std::cout << "[SD2] Car angle: " << veh.angle() << std::endl;
+
+    if(veh.dist() < 0) {
       continue;
     }
 
@@ -129,7 +130,7 @@ int main(int argc , char *argv[]) {
     double tmplength = 0;
     for(std::vector<lane>::iterator it = _laneList.begin(); it != _laneList.end(); ++it) {
       tmplength += std::get<1>(*it);
-      if(tmplength > fmod((double)data[VEH_NAME]["pos"], length)) {
+      if(tmplength > fmod(veh.dist(), length)) {
         try {
           /* remove vehicle, reason teleportation
            * 0 = NOTIFICATION_TELEPORT
@@ -149,9 +150,9 @@ int main(int argc , char *argv[]) {
            * angle: Angle as given by SD2
            */
           std::string edgeID = traciclnt.lane.getEdgeID(std::get<0>(*it));
-          double pos = fmod((double)data[VEH_NAME]["pos"], length) - (tmplength - std::get<1>(*it));
+          float pos = fmod(veh.dist(), length) - (tmplength - std::get<1>(*it));
           int laneID = 0;
-          double angle = (double)data[VEH_NAME]["angle"];
+          float angle = veh.angle();
 
           /* angle conversion from SD2 ---> SUMO
            *
@@ -161,7 +162,7 @@ int main(int argc , char *argv[]) {
            *
            *        270°                       180°/-180°
            */
-          double sangle;
+          float sangle;
           if (angle > 270)
             sangle = 450 - angle;
           else
@@ -171,31 +172,31 @@ int main(int argc , char *argv[]) {
            *
            * TraCIPosition = struct{ double x, double y };
            */
-	  std::cout << "Translating edgeID (" << edgeID << "), pos (" << pos << ") and laneID (" << laneID << ") into tdpos" << std::endl;
+  	  std::cout << "Translating edgeID (" << edgeID << "), pos (" << pos << ") and laneID (" << laneID << ") into tdpos" << std::endl;
           TraCIAPI::TraCIPosition tdpos = traciclnt.simulation.convert2D(edgeID, pos, laneID);
-	  std::cout << "tdpos is (" << tdpos.x << "," << tdpos.y << ")" << std::endl;
-	  /* getting (x,y) of first track segment in sumo
-	   *
-	   * SUMO:     	SD2:
-	   * --------  	+-------
-	   * +
-	   * --------	--------
-	   */
-	  TraCIAPI::TraCIPosition start = traciclnt.simulation.convert2D("0to1", 0, 0);
-	  double width = traciclnt.lane.getWidth(std::get<0>(*it));
-	  struct {
-	    double x, y;
-	  } newPos = {
-	    (double)data[VEH_NAME]["x"] - ((double)data[VEH_NAME]["fsX"] - start.x),
-	    (double)data[VEH_NAME]["y"] - ((double)data[VEH_NAME]["fsY"] - start.y) + width / 2
-	  };
+  	  std::cout << "tdpos is (" << tdpos.x << "," << tdpos.y << ")" << std::endl;
+  	  /* getting (x,y) of first track segment in sumo
+  	   *
+  	   * SUMO:     	SD2:
+  	   * --------  	+-------
+  	   * +
+  	   * --------	--------
+  	   */
+  	  TraCIAPI::TraCIPosition start = traciclnt.simulation.convert2D("0to1", 0, 0);
+  	  double width = traciclnt.lane.getWidth(std::get<0>(*it));
+  	  struct {
+  	    double x, y;
+  	  } newPos = {
+  	    veh.mutable_pos()->x() - (veh.mutable_fs()->lx() - start.x),
+  	    veh.mutable_pos()->y() - (veh.mutable_fs()->ly() - start.y) + std::abs(veh.mutable_fs()->ly() - veh.mutable_fs()->ry()) / 2
+  	  };
 
           /* move the vehicle to the equivalent position and set angle */
-	  traciclnt.vehicle.moveToXY(VEH_NAME, edgeID, laneID, newPos.x, newPos.y, sangle, true);
+  	  traciclnt.vehicle.moveToXY(VEH_NAME, edgeID, laneID, newPos.x, newPos.y, sangle, true);
 
           std::cout << "[SUMO] Moved vehicle " << VEH_NAME << " to (" << newPos.x << "," << newPos.y << ") with an angle of " << sangle << "°" << std::endl;
 
-	  std::cout << "[SD2] (" << (double)data[VEH_NAME]["x"] << "," << (double)data[VEH_NAME]["y"] << "," << (double)data[VEH_NAME]["z"] << ")" << std::endl;
+  	  std::cout << "[SD2] (" << veh.mutable_pos()->x() << "," << veh.mutable_pos()->y() << "," << veh.mutable_pos()->z() << ")" << std::endl;
           break;
         }
         catch(tcpip::SocketException &e) {
@@ -204,14 +205,11 @@ int main(int argc , char *argv[]) {
       }
     }
 
-    /* replace old data */
-    oldData = data;
-
     /* jump to next simulation step */
     traciclnt.simulationStep(0);
 
     /* clear buffer */
-    memset(buffer, 0, sizeof(buffer));
+    memset(buffer, 0, BUFFER_SIZE);
   }
 
   return 0;
