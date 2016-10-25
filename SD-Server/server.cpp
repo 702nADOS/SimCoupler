@@ -132,16 +132,6 @@ int main(int argc , char *argv[]) {
       tmplength += std::get<1>(*it);
       if(tmplength > fmod(veh.dist(), length)) {
         try {
-          /* remove vehicle, reason teleportation
-           * 0 = NOTIFICATION_TELEPORT
-           *
-           * http://sumo.dlr.de/wiki/TraCI/Change_Vehicle_State#remove_.280x81.29
-           */
-          traciclnt.vehicle.remove(VEH_NAME, 0);
-
-          /* add vehicle */
-          traciclnt.vehicle.add(VEH_NAME, "route0", "Car", std::to_string(traciclnt.simulation.getCurrentTime()));
-
           /* gather information for moveToXY
            *
            * edgeID: ID of the edge, the vehicle will be placed on
@@ -172,31 +162,34 @@ int main(int argc , char *argv[]) {
            *
            * TraCIPosition = struct{ double x, double y };
            */
-  	  std::cout << "Translating edgeID (" << edgeID << "), pos (" << pos << ") and laneID (" << laneID << ") into tdpos" << std::endl;
+          std::cout << "Translating edgeID (" << edgeID << "), pos (" << pos << ") and laneID (" << laneID << ") into tdpos" << std::endl;
           TraCIAPI::TraCIPosition tdpos = traciclnt.simulation.convert2D(edgeID, pos, laneID);
-  	  std::cout << "tdpos is (" << tdpos.x << "," << tdpos.y << ")" << std::endl;
-  	  /* getting (x,y) of first track segment in sumo
-  	   *
-  	   * SUMO:     	SD2:
-  	   * --------  	+-------
-  	   * +
-  	   * --------	--------
-  	   */
-  	  TraCIAPI::TraCIPosition start = traciclnt.simulation.convert2D("0to1", 0, 0);
-  	  double width = traciclnt.lane.getWidth(std::get<0>(*it));
-  	  struct {
-  	    double x, y;
-  	  } newPos = {
-  	    veh.mutable_pos()->x() - (veh.mutable_fs()->lx() - start.x),
-  	    veh.mutable_pos()->y() - (veh.mutable_fs()->ly() - start.y) + std::abs(veh.mutable_fs()->ly() - veh.mutable_fs()->ry()) / 2
-  	  };
+          std::cout << "tdpos is (" << tdpos.x << "," << tdpos.y << ")" << std::endl;
+          /* getting (x,y) of first track segment in sumo
+           *
+           * SUMO:              SD2:
+           * --------           +-------
+           * +
+           * --------           --------
+           */
+          TraCIAPI::TraCIPosition start = traciclnt.simulation.convert2D("0to1", 0, 0);
+          double width = traciclnt.lane.getWidth(std::get<0>(*it));
+          struct {
+            double x, y;
+          } newPos = {
+            veh.mutable_pos()->x() - (veh.mutable_fs()->lx() - start.x),
+            veh.mutable_pos()->y() - (veh.mutable_fs()->ly() - start.y) + std::abs(veh.mutable_fs()->ly() - veh.mutable_fs()->ry()) / 2
+          };
 
-          /* move the vehicle to the equivalent position and set angle */
-  	  traciclnt.vehicle.moveToXY(VEH_NAME, edgeID, laneID, newPos.x, newPos.y, sangle, true);
+          /* move the vehicle to the equivalent position and set angle
+           * http://sumo.dlr.de/wiki/TraCI/Change_Vehicle_State#move_to_XY_.280xb4.29
+           * "[...] keepRoute = 2: The vehicle is mapped to the exact position in the network [...]"
+           */
+          traciclnt.vehicle.moveToXY(VEH_NAME, edgeID, laneID, newPos.x, newPos.y, sangle, 2);
 
           std::cout << "[SUMO] Moved vehicle " << VEH_NAME << " to (" << newPos.x << "," << newPos.y << ") with an angle of " << sangle << "°" << std::endl;
 
-  	  std::cout << "[SD2] (" << veh.mutable_pos()->x() << "," << veh.mutable_pos()->y() << "," << veh.mutable_pos()->z() << ")" << std::endl;
+          std::cout << "[SD2] (" << veh.mutable_pos()->x() << "," << veh.mutable_pos()->y() << "," << veh.mutable_pos()->z() << ")" << std::endl;
           break;
         }
         catch(tcpip::SocketException &e) {
