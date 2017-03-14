@@ -96,6 +96,9 @@ int main() {
 	veh.mutable_position()->x() - (track.segments(0).vertex(0).x() - (float)start.x),
 	veh.mutable_position()->y() - (track.segments(0).vertex(0).y() - (float)start.y) + std::abs(track.segments(0).vertex(0).y() - track.segments(0).vertex(1).y()) / 2
       };
+      cout << "Position (" << pos.x << ", " << pos.y << ")" << endl;
+      std::tuple<std::string, SUMOReal, int> tmp = traciclnt.simulation.convertRoad(pos.x, pos.y);
+      cout << "RoadId: " << std::get<0>(tmp) << "; Pos: " << std::get<1>(tmp) << "; LaneId " << std::get<2>(tmp) << endl;
 
       float angle = situation.vehicles(i).yaw() * 180.0 / M_PI;
       if (angle < 0) angle += 360.0;
@@ -104,10 +107,10 @@ int main() {
       else
 	angle = 90 - angle;
       try {
-	traciclnt.vehicle.moveToXY((string("veh") + std::to_string(i)).c_str(), "", 0, pos.x, pos.y, angle, 2);
+	traciclnt.vehicle.moveToXY((string("veh") + std::to_string(i)).c_str(), std::get<0>(tmp), std::get<2>(tmp), pos.x, pos.y, angle, 2);
       } catch (tcpip::SocketException &e) {
-	traciclnt.vehicle.add((string("veh") + std::to_string(i)).c_str(), "route0", "Car", "9000");
-	traciclnt.vehicle.moveToXY((string("veh") + std::to_string(i)).c_str(), "", 0, pos.x, pos.y, angle, 2);
+	/*traciclnt.vehicle.add((string("veh") + std::to_string(i)).c_str(), "route0", "Car", "9000");
+	traciclnt.vehicle.moveToXY((string("veh") + std::to_string(i)).c_str(), "0to1", 0, pos.x, pos.y, angle, 2);*/
       }
     }
     traciclnt.simulationStep(0);
