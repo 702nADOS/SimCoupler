@@ -13,6 +13,7 @@ public:
 	~SD2();
 	protobuf::Track& getTrack();
 	protobuf::Situation& getCurrentSituation();
+	void simulationStep();
 
 private:
 	// boost

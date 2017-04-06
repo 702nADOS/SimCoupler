@@ -1,5 +1,11 @@
 #include <sd2.hh>
 
+// boost
+#include <boost/asio.hpp>
+// protobuf
+#include <track.pb.h>
+#include <situation.pb.h>
+
 #define SD2_PORT 9000
 
 SD2::SD2() : s(io_service) {
@@ -19,9 +25,13 @@ protobuf::Track& SD2::getTrack() {
 	return track;
 };
 
-protobuf::Situation& getCurrentSituation() {
+protobuf::Situation& SD2::getCurrentSituation() {
 	return currentSituation;
 };
+
+void SD2::simulationStep() {
+	receiveSituation();
+}
 
 /*
  * Receive a Packet from SD2 (4 byte message length + message)
