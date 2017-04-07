@@ -16,11 +16,6 @@ int main(int argc, char *argv[]) {
     sd2.simulationStep();
     situation = sd2.getCurrentSituation();
 
-    for(int i=0; i<situation.vehicles_size(); i++) {
-      std::cout << situation.vehicles(i).name() << std::endl;
-    }
-    // data acquisition
-    // forward data
-    // control for next simulation step
+    sumo.simulationStep(situation);
   }
 }
