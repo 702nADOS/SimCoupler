@@ -6,6 +6,7 @@
 #include <track.pb.h>
 //
 #include <math.h>
+#include <string>
 
 #define SUMO_IP "localhost"
 #define SUMO_PORT 2002
@@ -40,7 +41,7 @@ SUMO::~SUMO() {
     TraCIAPI::close();
   } catch (tcpip::SocketException &e) {
     // TODO logging
-    //std::cout << "TraCIAPI: " << e.what() << std::endl;
+    std::cout << "TraCIAPI: " << e.what() << std::endl;
   }
 };
 
@@ -49,14 +50,22 @@ void SUMO::simulationStep(protobuf::Situation &situation) {
 
   for(int i=0; i < situation.vehicles_size(); i++) {
     protobuf::Vehicle veh = situation.vehicles(i);
-    std::cout << veh.name() << std::endl;
+    //std::cout << veh.name() << std::endl;
 
     x = veh.mutable_position()->x() - adjustX;
     y = veh.mutable_position()->y() - adjustY;
 
     std::tuple<std::string, SUMOReal, int> tmp = TraCIAPI::simulation.convertRoad(x, y);
     angle = SUMO::convertYawToAngle(veh.yaw());
-    TraCIAPI::vehicle.moveToXY("veh0", std::get<0>(tmp), std::get<2>(tmp), x, y, angle, 2);
+    while(true) {
+      try {
+        TraCIAPI::vehicle.moveToXY(veh.name(), std::get<0>(tmp), std::get<2>(tmp), x, y, angle, 2);
+        break;
+      } catch (tcpip::SocketException &e) {
+        std::cout << "TraCIAPI: " << e.what() << std::endl;
+        TraCIAPI::vehicle.add(veh.name(), "route0", "Car", std::to_string(TraCIAPI::simulation.getCurrentTime()));
+      }
+    }
     TraCIAPI::simulationStep(0);
   }
 }
