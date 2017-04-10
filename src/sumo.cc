@@ -66,8 +66,9 @@ void SUMO::simulationStep(protobuf::Situation &situation) {
         TraCIAPI::vehicle.add(veh.name(), "route0", "Car", std::to_string(TraCIAPI::simulation.getCurrentTime()));
       }
     }
-    TraCIAPI::simulationStep(0);
   }
+
+  TraCIAPI::simulationStep(situation.time() * 1000);
 }
 
 float SUMO::convertYawToAngle(float yaw) {
