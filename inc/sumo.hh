@@ -19,7 +19,7 @@ private:
 
   protobuf::Track track;
   float convertYawToAngle(float yaw);
-  void moveVehicleToXY(float x, float y, float angle);
+  void moveVehicleToXY(std::string name, float x, float y, float angle);
 };
 
 #endif

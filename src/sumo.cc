@@ -1,3 +1,13 @@
+/*
+ * SUMO
+ * SUMO.cc
+ *
+ * Purpose: Handles the connection to SUMO.
+ * Since SUMO will only be used as a middleware for other simulators,
+ * this module only transmits the current state of the simulation to it.
+ * Other clients can use the TraCI API provided by SUMO to receive data.
+ */
+
 #include <sumo.hh>
 
 // traci
@@ -50,37 +60,48 @@ void SUMO::simulationStep(protobuf::Situation &situation) {
 
   for(int i=0; i < situation.vehicles_size(); i++) {
     protobuf::Vehicle veh = situation.vehicles(i);
-    //std::cout << veh.name() << std::endl;
 
-    x = veh.mutable_position()->x() - adjustX;
-    y = veh.mutable_position()->y() - adjustY;
-
-    std::tuple<std::string, SUMOReal, int> tmp = TraCIAPI::simulation.convertRoad(x, y);
-    angle = SUMO::convertYawToAngle(veh.yaw());
-    while(true) {
-      try {
-        TraCIAPI::vehicle.moveToXY(veh.name(), std::get<0>(tmp), std::get<2>(tmp), x, y, angle, 2);
-        break;
-      } catch (tcpip::SocketException &e) {
-        std::cout << "TraCIAPI: " << e.what() << std::endl;
-        TraCIAPI::vehicle.add(veh.name(), "route0", "Car", std::to_string(TraCIAPI::simulation.getCurrentTime()));
-      }
-    }
+    moveVehicleToXY(veh.name(),
+                    veh.mutable_position()->x(),
+                    veh.mutable_position()->y(),
+                    veh.yaw());
   }
 
   TraCIAPI::simulationStep(situation.time() * 1000);
 }
 
 float SUMO::convertYawToAngle(float yaw) {
+  // convert from yaw to angle
   float angle = yaw * 180.0 / M_PI;
   if (angle < 0) angle += 360.0;
 
-  /* SUMO uses different rotation */
+  // SUMO uses different rotation
   if (angle > 270) angle = 450 - angle;
   else angle = 90 - angle;
 
   return angle;
 };
 
-void moveVehicleToXY(float x, float y, float angle) {
+void SUMO::moveVehicleToXY(std::string name, float x, float y, float angle) {
+  // adjust (x, y) coordinates
+  x = x - SUMO::adjustX;
+  y = y - SUMO::adjustY;
+
+  // workaround to fix some vehicle misplacements
+  std::tuple<std::string, SUMOReal, int> tmp = TraCIAPI::simulation.convertRoad(x, y);
+
+  // convert yaw to angle and adjust
+  angle = SUMO::convertYawToAngle(angle);
+
+  // execute moveToXY
+  while(true) {
+    try {
+      TraCIAPI::vehicle.moveToXY(name, std::get<0>(tmp), std::get<2>(tmp), x, y, angle, 2);
+      break;
+    } catch (tcpip::SocketException &e) {
+      // vehicle disappeared? or wasn't part of the simulation
+      std::cout << "TraCIAPI: " << e.what() << std::endl;
+      TraCIAPI::vehicle.add(name, "route0", "Car", std::to_string(TraCIAPI::simulation.getCurrentTime()));
+    }
+  }
 };
