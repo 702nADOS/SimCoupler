@@ -15,8 +15,6 @@
 #include <setup.pb.h>
 #include <state.pb.h>
 
-#include <iostream>
-
 SD2::SD2(std::string address, int port) : s(io_service) {
 	boost::asio::ip::tcp::endpoint ep(boost::asio::ip::address::from_string(address), port);
 	boost::asio::ip::tcp::acceptor ac(io_service, ep);

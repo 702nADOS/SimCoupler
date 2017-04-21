@@ -9,6 +9,9 @@
 
 #include <vrep.hh>
 
+//
+#include <iostream>
+
 // V-REP
 extern "C" {
   #include "extApi.h"

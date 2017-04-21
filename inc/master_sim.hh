@@ -5,8 +5,6 @@
 #include <state.pb.h>
 #include <setup.pb.h>
 
-#include <iostream>
-
 class MASTER_SIM {
 public:
   protobuf::Setup& getSetup() { return setup; };

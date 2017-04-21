@@ -1,6 +1,9 @@
 #ifndef SAVM_HH
 #define SAVM_HH
 
+// boost
+#include <boost/asio.hpp>
+
 class SAVM {
 public:
   SAVM(std::string address, int port);
