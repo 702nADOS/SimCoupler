@@ -5,7 +5,7 @@
 // protobuf
 #include <setup.pb.h>
 
-#define SIM_VREP
+#define SIM_SD2
 
 int main(int argc, char *argv[]) {
   MASTER_SIM* ms;
