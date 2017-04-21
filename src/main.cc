@@ -1,21 +1,49 @@
+// simulators
 #include <sd2.hh>
+#include <vrep.hh>
 #include <sumo.hh>
+// protobuf
+#include <setup.pb.h>
 
-#include <iostream>
-
-#include <track.pb.h>
+#define SIM_VREP
 
 int main(int argc, char *argv[]) {
-  SD2 sd2;
-  protobuf::Track track = sd2.getTrack();
-  SUMO sumo(track);
+  MASTER_SIM* ms;
 
-  protobuf::Situation situation;
+  /* create module for master simulation */
+  #ifdef SIM_SD2
+  ms = new SD2("127.0.0.1", 9000);
+  #endif
 
+  #ifdef SIM_VREP
+  ms = new VREP("127.0.0.1", 9000);
+  #endif
+
+  /* create modules for secondary simulators */
+  #ifdef SIM_SD2
+  // get setup from main simulation
+  protobuf::Setup track = ms->getSetup();
+  SUMO sumo("127.0.0.1", 2002, track);
+  #endif
+
+  /* TODO create modules for S/A VMs */
+
+  /* main loop
+   *
+   * 1. execute simulation step in master simulation
+   * 2. get current state from master simulation
+   * 3. pass current state to secondary simulators
+   * 4. pass current state to S/A VMs
+   */
+  protobuf::State currentState;
   while(true) {
-    sd2.simulationStep();
-    situation = sd2.getCurrentSituation();
+    ms->simulationStep();
+    currentState = ms->getCurrentState();
 
-    sumo.simulationStep(situation);
+    #ifdef SIM_SD2
+    sumo.simulationStep(currentState);
+    #endif
+
+    // TODO S/A VMs
   }
 }

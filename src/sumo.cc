@@ -13,21 +13,18 @@
 // traci
 #include <utils/traci/TraCIAPI.h>
 // protobuf
-#include <track.pb.h>
+#include <setup.pb.h>
 //
 #include <math.h>
 #include <string>
 
-#define SUMO_IP "localhost"
-#define SUMO_PORT 2002
-
 /* TraCIAPI client library: http://sumo.dlr.de/wiki/TraCI/C%2B%2BTraCIAPI */
 
-SUMO::SUMO(protobuf::Track &track) {
+SUMO::SUMO(std::string address, int port, protobuf::Setup &track) {
   this->track = track;
 
   try {
-    TraCIAPI::connect(SUMO_IP, SUMO_PORT);
+    TraCIAPI::connect(address, port);
   } catch (tcpip::SocketException &e) {
     // TODO logging
     std::cout << "TraCIAPI: " << e.what() << std::endl;
@@ -37,7 +34,6 @@ SUMO::SUMO(protobuf::Track &track) {
   TraCIAPI::TraCIPosition firstSegment = TraCIAPI::simulation.convert2D("0to1", 0);
   adjustX = track.segments(0).vertex(0).x() - (float)firstSegment.x;
   adjustY = track.segments(0).vertex(0).y() - (float)firstSegment.y - std::abs(track.segments(0).vertex(0).y() - track.segments(0).vertex(1).y()) / 2;
-  //adjustY = track.segments(0).vertex(0).y() - (float)firstSegment.y + std::abs(track.segments(0).vertex(0).y() - track.segments(0).vertex(1).y()) / 2;
 
   /* start simulation */
   TraCIAPI::simulationStep(0);
@@ -55,7 +51,7 @@ SUMO::~SUMO() {
   }
 };
 
-void SUMO::simulationStep(protobuf::Situation &situation) {
+void SUMO::simulationStep(protobuf::State &situation) {
   float x, y, angle;
 
   for(int i=0; i < situation.vehicles_size(); i++) {

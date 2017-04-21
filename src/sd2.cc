@@ -1,15 +1,24 @@
+/*
+ * SpeedDreams2 (SD2)
+ * sd2.cc
+ *
+ * Purpose: Handles the connection to SpeedDreams2 (SD2).
+ * Receives data about the track and vehicles in the simulation
+ * and provides it for other simulators.
+ */
+
 #include <sd2.hh>
 
 // boost
 #include <boost/asio.hpp>
 // protobuf
-#include <track.pb.h>
-#include <situation.pb.h>
+#include <setup.pb.h>
+#include <state.pb.h>
 
-#define SD2_PORT 9000
+#include <iostream>
 
-SD2::SD2() : s(io_service) {
-	boost::asio::ip::tcp::endpoint ep(boost::asio::ip::tcp::v4(), SD2_PORT);
+SD2::SD2(std::string address, int port) : s(io_service) {
+	boost::asio::ip::tcp::endpoint ep(boost::asio::ip::address::from_string(address), port);
 	boost::asio::ip::tcp::acceptor ac(io_service, ep);
 	ac.accept(s);
 	receiveTrack();
@@ -19,19 +28,13 @@ SD2::~SD2() {
 	// TODO correctly destr...close boost stuff
 };
 
-// get and set methods
-
-protobuf::Track& SD2::getTrack() {
-	return track;
-};
-
-protobuf::Situation& SD2::getCurrentSituation() {
-	return currentSituation;
-};
-
 void SD2::simulationStep() {
 	receiveSituation();
-}
+};
+
+int SD2::getNumberOfSimulationObjects() {
+	return getCurrentState().vehicles_size();
+};
 
 /*
  * Receive a Packet from SD2 (4 byte message length + message)
@@ -56,7 +59,7 @@ void SD2::receiveTrack() {
 	std::vector<uint8_t> message;
 	receivePacket(message);
 
-	if (track.ParseFromArray(message.data(), message.size()));
+	if (getSetup().ParseFromArray(message.data(), message.size()));
 	else ; // TODO error parsing packet
 };
 
@@ -67,6 +70,6 @@ void SD2::receiveSituation() {
 	std::vector<uint8_t> message;
 	receivePacket(message);
 
-	if (currentSituation.ParseFromArray(message.data(), message.size()));
+	if (getCurrentState().ParseFromArray(message.data(), message.size()));
 	else ; // TODO error parsing
 };
