@@ -17,8 +17,7 @@ set (CMAKE_CXX_STANDARD 11)
 
 # VREP
 # FIXME adjust VREP_PATH if necessary
-set(VREP_PATH "/usr/share/vrep/programming")
-add_library(libvrep STATIC "${VREP_PATH}/remoteApi/extApi.c" "${VREP_PATH}/remoteApi/extApiPlatform.c")
+add_library(libvrep STATIC "$ENV{VREP_PATH}/programming/remoteApi/extApi.c" "$ENV{VREP_PATH}/programming/remoteApi/extApiPlatform.c")
 set_target_properties(libvrep PROPERTIES COMPILE_FLAGS "-DNON_MATLAB_PARSING -DMAX_EXT_API_CONNECTIONS=255 -D__linux")
 target_include_directories(libvrep PUBLIC /usr/share/vrep/programming/remoteApi)
 target_include_directories(libvrep PUBLIC /usr/share/vrep/programming/include)
@@ -29,10 +28,10 @@ include_directories($ENV{SUMO_HOME}/src)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}) # protobuf *.o files
 include_directories(inc)
 AUX_SOURCE_DIRECTORY(src SRC_CC)
-add_executable(main "${VREP_PATH}/remoteApi/extApi.c" "${VREP_PATH}/remoteApi/extApiPlatform.c" ${SRC_VREP} ${SRC_CC} ${PROTO_SRCS} ${PROTO_HDRS})
+add_executable(main "$ENV{VREP_PATH}/programming/remoteApi/extApi.c" "$ENV{VREP_PATH}/programming/remoteApi/extApiPlatform.c" ${SRC_VREP} ${SRC_CC} ${PROTO_SRCS} ${PROTO_HDRS})
 set_target_properties(main PROPERTIES COMPILE_FLAGS "-DNON_MATLAB_PARSING -DMAX_EXT_API_CONNECTIONS=255 -D__linux")
 # includes
-target_include_directories(main PUBLIC ${VREP_PATH}/remoteApi ${VREP_PATH}/include) # VREP
+target_include_directories(main PUBLIC $ENV{VREP_PATH}/programming/remoteApi $ENV{VREP_PATH}/programming/include) # VREP
 
 # -------
 # linking
