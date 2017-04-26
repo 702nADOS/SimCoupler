@@ -15,7 +15,7 @@
 // protobuf
 #include <setup.pb.h>
 //
-#include <math.h>
+#include <cmath>
 #include <string>
 
 /* TraCIAPI client library: http://sumo.dlr.de/wiki/TraCI/C%2B%2BTraCIAPI */
