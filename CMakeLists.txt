@@ -19,8 +19,8 @@ set (CMAKE_CXX_STANDARD 11)
 # FIXME adjust VREP_PATH if necessary
 add_library(libvrep STATIC "$ENV{VREP_PATH}/programming/remoteApi/extApi.c" "$ENV{VREP_PATH}/programming/remoteApi/extApiPlatform.c")
 set_target_properties(libvrep PROPERTIES COMPILE_FLAGS "-DNON_MATLAB_PARSING -DMAX_EXT_API_CONNECTIONS=255 -D__linux")
-target_include_directories(libvrep PUBLIC /usr/share/vrep/programming/remoteApi)
-target_include_directories(libvrep PUBLIC /usr/share/vrep/programming/include)
+target_include_directories(libvrep PUBLIC $ENV{VREP_PATH}/programming/remoteApi)
+target_include_directories(libvrep PUBLIC $ENV{VREP_PATH}/programming/include)
 
 # SimCoupler
 link_directories($ENV{SUMO_HOME}/src/utils/traci $ENV{SUMO_HOME}/src/foreign/tcpip $ENV{SUMO_HOME}/src/utils/common)
